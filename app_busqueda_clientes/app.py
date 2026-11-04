@@ -148,6 +148,7 @@ TIPOS_NEGOCIO = [
     "Restaurantes",
     "Barberías",
     "Odontólogos",
+    "Médicos",
     "Inmobiliarias",
 ]
 
@@ -198,6 +199,10 @@ _CONSULTAS_EXTRA: dict[str, list[str]] = {
     "Odontólogos": [
         "odontólogo", "clínica dental", "dentista", "odontología", "consultorio dental",
         "ortodoncia", "endodoncia", "implantes dentales", "blanqueamiento dental",
+    ],
+    "Médicos": [
+        "consultorio médico", "médico consultorio", "medicina general", "médico general",
+        "médico", "consulta médica", "médico particular", "especialista médico", "clínica médica",
     ],
     "Inmobiliarias": [
         "inmobiliaria", "bienes raíces", "apartamentos", "casas en venta", "arriendo apartamentos",
@@ -361,6 +366,7 @@ class BusinessDataProvider:
         "Restaurantes": "restaurante",
         "Barberías": "barbería",
         "Odontólogos": "odontólogo clínica dental",
+        "Médicos": "médico consultorio",
         "Inmobiliarias": "inmobiliaria",
     }
 
@@ -396,6 +402,12 @@ class BusinessDataProvider:
             "Responde consultas fuera de horario manualmente",
             "Sin confirmación automática de citas",
         ],
+        "Médicos": [
+            "Agenda citas solo por llamada o WhatsApp manual",
+            "No envía recordatorios automáticos de cita a pacientes",
+            "Recepción satura con consultas repetidas por WhatsApp",
+            "Pierde pacientes que escriben fuera de horario de consulta",
+        ],
         "Inmobiliarias": [
             "Responde consultas de propiedades manualmente",
             "No califica leads automáticamente",
@@ -422,6 +434,11 @@ class BusinessDataProvider:
         "Odontólogos": (
             "Hola, vi {nombre} y creo que automatizar citas y recordatorios por WhatsApp "
             "mejoraría la experiencia de tus pacientes y liberaría tiempo de tu recepción."
+        ),
+        "Médicos": (
+            "Hola, vi {nombre} y creo que un asistente por WhatsApp para agendar citas, "
+            "enviar recordatorios y responder consultas frecuentes liberaría a tu recepción "
+            "y evitaría perder pacientes fuera de horario."
         ),
         "Inmobiliarias": (
             "Hola, vi {nombre} y creo que un asistente por WhatsApp que califique leads "
