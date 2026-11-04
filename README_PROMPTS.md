@@ -1,4 +1,4 @@
-## v1.11
+## v1.12
 
 
 
@@ -99,3 +99,14 @@ tienen también un programa similar como el que yo tengo, tenerlo para generar m
 
 
 Se agrega app_v3.py (que es la versión final que dió claude, la v2 se pone dentro de una carpeta independiente)
+
+
+
+
+
+
+##################
+## v1.12
+
+
+Se generaron 499 posibles prospectos médicos en un informe y está ya almacenado
