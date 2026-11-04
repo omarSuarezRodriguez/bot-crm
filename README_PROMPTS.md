@@ -1,4 +1,4 @@
-## v1.7
+## v1.8
 
 
 
@@ -60,5 +60,7 @@ En app_busqueda_clientes se añadió el tipo de negocio: médicos
 
 
 
+##################
+## v1.8
 
-
+Se agregó app_v2.py (temporal, la que se está haciendo en claude)
