@@ -1,4 +1,4 @@
-## v1.10
+## v1.11
 
 
 
@@ -88,3 +88,14 @@ para que cuando claude termine, eliminarlos junto con app_v2.py para reemplazar 
 
 
 
+
+#################
+## v1.11
+
+https://mnblack.com/
+
+tienen también un programa similar como el que yo tengo, tenerlo para generar más prospectos por si acaso
+
+
+
+Se agrega app_v3.py (que es la versión final que dió claude, la v2 se pone dentro de una carpeta independiente)
