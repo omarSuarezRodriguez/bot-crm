@@ -1,4 +1,4 @@
-## v1.6
+## v1.7
 
 
 
@@ -49,6 +49,16 @@ Se creó la app de busqueda videos youtube
 ## v1.6
 
 En app_busqueda_clientes se añadió el tipo de negocio: médicos
+
+
+
+
+
+##################
+## v1.7
+
+
+
 
 
 

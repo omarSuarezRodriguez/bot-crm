@@ -149,6 +149,7 @@ TIPOS_NEGOCIO = [
     "Barberías",
     "Odontólogos",
     "Médicos",
+    "Psicólogos",
     "Inmobiliarias",
 ]
 
@@ -203,6 +204,10 @@ _CONSULTAS_EXTRA: dict[str, list[str]] = {
     "Médicos": [
         "consultorio médico", "médico consultorio", "medicina general", "médico general",
         "médico", "consulta médica", "médico particular", "especialista médico", "clínica médica",
+    ],
+    "Psicólogos": [
+        "consultorio psicológico", "psicólogo consultorio", "psicólogo clínico", "consulta psicológica",
+        "psicólogo", "psicóloga", "psicólogo particular", "psicóloga clínica", "consultorio de psicología",
     ],
     "Inmobiliarias": [
         "inmobiliaria", "bienes raíces", "apartamentos", "casas en venta", "arriendo apartamentos",
@@ -367,6 +372,7 @@ class BusinessDataProvider:
         "Barberías": "barbería",
         "Odontólogos": "odontólogo clínica dental",
         "Médicos": "médico consultorio",
+        "Psicólogos": "psicólogo consultorio",
         "Inmobiliarias": "inmobiliaria",
     }
 
@@ -408,6 +414,12 @@ class BusinessDataProvider:
             "Recepción satura con consultas repetidas por WhatsApp",
             "Pierde pacientes que escriben fuera de horario de consulta",
         ],
+        "Psicólogos": [
+            "Agenda sesiones solo por WhatsApp o Instagram manual",
+            "Alto no-show: no confirma ni recuerda la sesión automáticamente",
+            "Primeros contactos y lista de espera sin respuesta automática",
+            "Pierde pacientes nuevos que escriben fuera de horario",
+        ],
         "Inmobiliarias": [
             "Responde consultas de propiedades manualmente",
             "No califica leads automáticamente",
@@ -439,6 +451,11 @@ class BusinessDataProvider:
             "Hola, vi {nombre} y creo que un asistente por WhatsApp para agendar citas, "
             "enviar recordatorios y responder consultas frecuentes liberaría a tu recepción "
             "y evitaría perder pacientes fuera de horario."
+        ),
+        "Psicólogos": (
+            "Hola, vi {nombre} y creo que un asistente por WhatsApp para agendar sesiones, "
+            "confirmar asistencia y atender el primer contacto te reduciría los no-shows "
+            "y evitaría perder pacientes nuevos fuera de horario."
         ),
         "Inmobiliarias": (
             "Hola, vi {nombre} y creo que un asistente por WhatsApp que califique leads "
