@@ -1,3 +1,1345 @@
+#!/usr/bin/env python3
+"""
+Backend y utilidades para ProspeccionApp (app_v2).
+Prefijo concatenado delante de la interfaz gráfica.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import os
+import queue
+import re
+import sqlite3
+import subprocess
+import threading
+import time
+import urllib.error
+import urllib.request
+import webbrowser
+from dataclasses import dataclass, field
+from datetime import datetime
+from tkinter import font as tkfont
+from tkinter import messagebox, simpledialog, ttk
+from typing import Callable, Optional
+import tkinter as tk
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+
+
+# ---------------------------------------------------------------------------
+# Rutas y constantes
+# ---------------------------------------------------------------------------
+
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RUTA_DB = os.path.join(_BASE_DIR, "prospectos.db")
+RUTA_PALABRAS = os.path.join(_BASE_DIR, "palabras_clave.json")
+INFORMES_DIR = os.path.join(_BASE_DIR, "informes")
+
+COLORES = {
+    "fondo": "#F0F3F7",
+    "tarjeta": "#FFFFFF",
+    "texto": "#1F2933",
+    "suave": "#6B7785",
+    "borde": "#D0D7E2",
+    "primario": "#1E6BB8",
+    "primario_claro": "#E8F1FB",
+    "primario_osc": "#155A9A",
+    "sel": "#D6E8FA",
+    "ok": "#1B7A4E",
+    "aviso": "#B86E00",
+    "error": "#C0392B",
+}
+
+CIUDADES_POR_PAIS: dict[str, list[str]] = {
+    "España": [
+        "Madrid", "Barcelona", "Valencia", "Sevilla", "Zaragoza", "Málaga", "Murcia",
+        "Palma", "Las Palmas", "Bilbao", "Alicante", "Córdoba", "Valladolid", "Vigo",
+        "Gijón", "Granada", "Vitoria", "Elche", "Oviedo", "Badalona",
+    ],
+    "México": [
+        "Ciudad de México", "Guadalajara", "Monterrey", "Puebla", "Tijuana", "León",
+        "Ciudad Juárez", "Zapopan", "Mérida", "Cancún", "Querétaro", "San Luis Potosí",
+        "Aguascalientes", "Hermosillo", "Saltillo", "Morelia", "Culiacán", "Veracruz",
+        "Acapulco", "Chihuahua", "Toluca", "Reynosa", "Torreón", "Oaxaca",
+    ],
+    "Colombia": [
+        "Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena", "Cúcuta",
+        "Bucaramanga", "Pereira", "Santa Marta", "Ibagué", "Manizales", "Villavicencio",
+        "Pasto", "Montería", "Armenia", "Neiva", "Sincelejo", "Valledupar", "Popayán",
+        "Tunja", "Riohacha", "Florencia", "Yopal", "Quibdó", "San Andrés",
+    ],
+    "Argentina": [
+        "Buenos Aires", "Córdoba", "Rosario", "Mendoza", "La Plata", "San Miguel de Tucumán",
+        "Mar del Plata", "Salta", "Santa Fe", "San Juan", "Resistencia", "Neuquén",
+        "Santiago del Estero", "Corrientes", "Bahía Blanca", "Posadas", "Paraná",
+        "Formosa", "San Salvador de Jujuy", "La Rioja",
+    ],
+    "Perú": [
+        "Lima", "Arequipa", "Trujillo", "Chiclayo", "Piura", "Cusco", "Iquitos",
+        "Huancayo", "Tacna", "Juliaca", "Pucallpa", "Cajamarca", "Chimbote", "Ayacucho",
+        "Tarapoto", "Huánuco", "Ica", "Puno", "Tumbes", "Huaraz",
+    ],
+    "Venezuela": [
+        "Caracas", "Maracaibo", "Valencia", "Barquisimeto", "Maracay", "Ciudad Guayana",
+        "Barcelona", "Maturín", "Ciudad Bolívar", "San Cristóbal", "Cumaná", "Mérida",
+        "Cabimas", "Barinas", "Turmero", "Puerto La Cruz", "Petare", "Los Teques",
+    ],
+    "Chile": [
+        "Santiago", "Valparaíso", "Concepción", "La Serena", "Antofagasta", "Temuco",
+        "Rancagua", "Talca", "Arica", "Iquique", "Puerto Montt", "Coquimbo", "Osorno",
+        "Valdivia", "Chillán", "Copiapó", "Calama", "Quilpué", "Viña del Mar",
+    ],
+    "Ecuador": [
+        "Quito", "Guayaquil", "Cuenca", "Santo Domingo", "Machala", "Durán", "Manta",
+        "Portoviejo", "Loja", "Ambato", "Esmeraldas", "Quevedo", "Riobamba", "Milagro",
+        "Ibarra", "Latacunga", "Tulcán", "Babahoyo", "Santa Elena",
+    ],
+    "Guatemala": [
+        "Ciudad de Guatemala", "Mixco", "Villa Nueva", "Quetzaltenango", "Escuintla",
+        "San Juan Sacatepéquez", "Villa Canales", "Petapa", "Cobán", "Huehuetenango",
+        "Chimaltenango", "Amatitlán", "Chinautla", "Antigua Guatemala", "Jalapa",
+    ],
+    "Cuba": [
+        "La Habana", "Santiago de Cuba", "Camagüey", "Holguín", "Santa Clara", "Guantánamo",
+        "Bayamo", "Las Tunas", "Cienfuegos", "Pinar del Río", "Matanzas", "Ciego de Ávila",
+        "Sancti Spíritus", "Manzanillo", "Artemisa",
+    ],
+    "Bolivia": [
+        "La Paz", "Santa Cruz", "Cochabamba", "Sucre", "Oruro", "Tarija", "Potosí",
+        "Trinidad", "El Alto", "Montero", "Warnes", "Sacaba", "Quillacollo", "Riberalta",
+    ],
+    "República Dominicana": [
+        "Santo Domingo", "Santiago de los Caballeros", "La Romana", "San Pedro de Macorís",
+        "Puerto Plata", "San Francisco de Macorís", "La Vega", "Higüey", "San Cristóbal",
+        "Moca", "Barahona", "Boca Chica", "Baní", "Azua",
+    ],
+    "Honduras": [
+        "Tegucigalpa", "San Pedro Sula", "La Ceiba", "Choloma", "El Progreso",
+        "Comayagua", "Choluteca", "Puerto Cortés", "Danlí", "Juticalpa", "Villanueva",
+        "Tela", "Santa Rosa de Copán", "Siguatepeque",
+    ],
+    "Paraguay": [
+        "Asunción", "Ciudad del Este", "San Lorenzo", "Luque", "Capiatá", "Lambaré",
+        "Fernando de la Mora", "Encarnación", "Pedro Juan Caballero", "Caaguazú",
+        "Coronel Oviedo", "Itauguá", "Villarrica", "Concepción",
+    ],
+    "El Salvador": [
+        "San Salvador", "Santa Ana", "San Miguel", "Soyapango", "Mejicanos", "Santa Tecla",
+        "Apopa", "Delgado", "Sonsonate", "San Martín", "Ilopango", "Cojutepeque",
+        "Usulután", "Ahuachapán", "La Unión",
+    ],
+    "Nicaragua": [
+        "Managua", "León", "Masaya", "Tipitapa", "Chinandega", "Matagalpa", "Estelí",
+        "Granada", "Juigalpa", "Jinotepe", "Bluefields", "Rivas", "Ocotal", "Diriamba",
+    ],
+    "Costa Rica": [
+        "San José", "Alajuela", "Cartago", "Heredia", "Limón", "Puntarenas", "Liberia",
+        "Desamparados", "San Isidro", "Curridabat", "San Carlos", "Pérez Zeledón",
+        "Grecia", "San Ramón", "Quesada",
+    ],
+    "Panamá": [
+        "Ciudad de Panamá", "San Miguelito", "David", "Colón", "Santiago", "La Chorrera",
+        "Chitré", "Penonomé", "Aguadulce", "Arraiján", "Changuinola", "La Concepción",
+    ],
+    "Uruguay": [
+        "Montevideo", "Salto", "Paysandú", "Las Piedras", "Rivera", "Maldonado",
+        "Tacuarembó", "Melo", "Mercedes", "Artigas", "Minas", "San José de Mayo",
+        "Durazno", "Florida", "Treinta y Tres",
+    ],
+    "Guinea Ecuatorial": ["Malabo", "Bata", "Ebebiyín", "Mongomo", "Aconibe", "Evinayong"],
+    "Puerto Rico": [
+        "San Juan", "Bayamón", "Carolina", "Ponce", "Caguas", "Guaynabo", "Mayagüez",
+        "Trujillo Alto", "Arecibo", "Fajardo", "Humacao", "Vega Baja", "Cayey", "Aguadilla",
+    ],
+}
+
+PAISES = list(CIUDADES_POR_PAIS.keys())
+
+_PAIS_REGION: dict[str, str] = {
+    "Colombia": "CO", "México": "MX", "Argentina": "AR", "Chile": "CL", "Perú": "PE",
+    "Ecuador": "EC", "Venezuela": "VE", "Bolivia": "BO", "Costa Rica": "CR",
+    "El Salvador": "SV", "Guatemala": "GT", "Honduras": "HN", "Nicaragua": "NI",
+    "Paraguay": "PY", "Panamá": "PA", "Uruguay": "UY", "Guinea Ecuatorial": "GQ",
+    "Puerto Rico": "PR", "España": "ES", "Cuba": "CU",
+}
+
+MIN_RESEÑAS_OPCIONES = ["0", "5", "10", "20", "50", "100"]
+OPCIONES_POR_PAGINA = ["10", "25", "50", "100", "200", "300", "400", "500", "600", "todos"]
+
+PAGINA_TODOS = 9999
+TOPE_PETICIONES_MAX = 80
+TOPE_CARGAR_TODO = 40
+COSTO_ESTIMADO_POR_PETICION_USD = 0.035
+
+PALABRAS_CLAVE_DEFECTO: dict[str, list[str]] = {
+    "Comidas rápidas": [
+        "comida rápida", "fast food", "hamburguesas", "salchipapas", "arepas", "perros calientes",
+        "pizza a domicilio", "pollo broaster", "comida corrida", "snacks", "empanadas", "tacos",
+    ],
+    "Restaurantes": [
+        "restaurante", "restaurantes", "comida", "asadero", "cafetería", "pizzería",
+        "marisquería", "sushi", "comida china", "parrilla", "menú del día", "brunch",
+    ],
+    "Barberías": [
+        "barbería", "barber shop", "peluquería barbería", "corte de cabello", "barbería hombres",
+        "barbería niños", "fade", "afeitado", "grooming",
+    ],
+    "Odontólogos": [
+        "odontólogo", "clínica dental", "dentista", "odontología", "consultorio dental",
+        "ortodoncia", "endodoncia", "implantes dentales", "blanqueamiento dental",
+    ],
+    "Médicos": [
+        "consultorio médico", "médico consultorio", "medicina general", "médico general",
+        "médico", "consulta médica", "médico particular", "especialista médico", "clínica médica",
+    ],
+    "Psicólogos": [
+        "consultorio psicológico", "psicólogo consultorio", "psicólogo clínico", "consulta psicológica",
+        "psicólogo", "psicóloga", "psicólogo particular", "psicóloga clínica", "consultorio de psicología",
+    ],
+    "Inmobiliarias": [
+        "inmobiliaria", "bienes raíces", "apartamentos", "casas en venta", "arriendo apartamentos",
+        "corretaje", "propiedades", "lotes en venta", "oficinas en arriendo",
+    ],
+}
+
+COLS_BUSQUEDA = (
+    ("fav", "★", 36),
+    ("nombre", "Negocio", 210),
+    ("ciudad", "Ciudad", 110),
+    ("tipo", "Tipo", 110),
+    ("telefono", "Teléfono", 130),
+    ("resenas", "Reseñas", 70),
+    ("web", "Web", 160),
+    ("direccion", "Dirección", 220),
+    ("estado", "Estado", 110),
+)
+
+COLS_GUARDADOS = (
+    ("fav", "★", 36),
+    ("nombre", "Negocio", 200),
+    ("ciudad", "Ciudad", 100),
+    ("tipo", "Tipo", 100),
+    ("telefono", "Teléfono", 120),
+    ("estado", "Estado", 110),
+    ("guardado_en", "Guardado", 130),
+    ("web", "Web", 150),
+    ("direccion", "Dirección", 200),
+)
+
+ESTADOS = ("nuevo", "contactado", "interesado", "no_interesado", "cliente")
+CAMPOS_EDITABLES = ["nombre", "telefono", "resenas", "web", "direccion"]
+CAMPO_DE_COLUMNA = {
+    "nombre": "nombre",
+    "telefono": "telefono",
+    "resenas": "resenas",
+    "web": "web",
+    "direccion": "direccion",
+}
+
+_COLUMNAS_EXPORT = (
+    "Negocio",
+    "Ciudad",
+    "Tipo",
+    "Teléfono",
+    "Reseñas",
+    "Web",
+    "Link Google Maps",
+    "Dirección",
+    "Estado",
+    "Notas",
+    "Guardado",
+)
+
+_MENSAJES_POR_TIPO: dict[str, str] = {
+    "Comidas rápidas": (
+        "Hola, vi {nombre} y creo que podrías automatizar tus pedidos por WhatsApp "
+        "para no perder clientes cuando no estás disponible. Tengo una solución que "
+        "responde automáticamente y toma pedidos 24/7."
+    ),
+    "Restaurantes": (
+        "Hola, vi {nombre} y noté que podrías mejorar la experiencia de tus clientes "
+        "con reservas y respuestas automáticas por WhatsApp. Te ayudo a no perder "
+        "mesas ni consultas fuera de horario."
+    ),
+    "Barberías": (
+        "Hola, vi {nombre} y creo que un bot de WhatsApp para agendar citas y enviar "
+        "recordatorios te ahorraría horas al día y reduciría las citas perdidas."
+    ),
+    "Odontólogos": (
+        "Hola, vi {nombre} y creo que automatizar citas y recordatorios por WhatsApp "
+        "mejoraría la experiencia de tus pacientes y liberaría tiempo de tu recepción."
+    ),
+    "Médicos": (
+        "Hola, vi {nombre} y creo que un asistente por WhatsApp para agendar citas, "
+        "enviar recordatorios y responder consultas frecuentes liberaría a tu recepción "
+        "y evitaría perder pacientes fuera de horario."
+    ),
+    "Psicólogos": (
+        "Hola, vi {nombre} y creo que un asistente por WhatsApp para agendar sesiones, "
+        "confirmar asistencia y atender el primer contacto te reduciría los no-shows "
+        "y evitaría perder pacientes nuevos fuera de horario."
+    ),
+    "Inmobiliarias": (
+        "Hola, vi {nombre} y creo que un asistente por WhatsApp que califique leads "
+        "y responda consultas 24/7 te ayudaría a cerrar más negocios sin perder "
+        "interesados fuera de horario."
+    ),
+}
+
+_COLORES_ESTADO = {
+    "nuevo": "#1F2933",
+    "contactado": "#1E6BB8",
+    "interesado": "#1B7A4E",
+    "no_interesado": "#8A6D3B",
+    "cliente": "#6B3FA0",
+}
+
+
+# ---------------------------------------------------------------------------
+# Modelo
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Negocio:
+    place_id: str
+    nombre: str
+    ciudad: str
+    tipo: str
+    telefono: str = ""
+    web: str = ""
+    resenas: int = 0
+    link_maps: str = ""
+    direccion: str = ""
+    estado: str = "nuevo"
+    notas: str = ""
+    guardado: bool = False
+    guardado_en: str = ""
+    actividad_reciente: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _leer_google_api_key() -> str:
+    key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if key:
+        return key
+    env_path = os.path.join(_BASE_DIR, ".env")
+    if os.path.isfile(env_path):
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("GOOGLE_MAPS_API_KEY="):
+                    valor = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if valor:
+                        return valor
+    raise ValueError(
+        "Falta la API key de Google Maps.\n"
+        "Crea un archivo .env con GOOGLE_MAPS_API_KEY=tu_clave\n"
+        "o define la variable de entorno GOOGLE_MAPS_API_KEY.\n"
+        "Activa Places API (New) en Google Cloud Console."
+    )
+
+
+def cargar_palabras_clave(ruta: str) -> tuple[dict[str, list[str]], Optional[str], bool]:
+    defecto = {k: list(v) for k, v in PALABRAS_CLAVE_DEFECTO.items()}
+    if not os.path.isfile(ruta):
+        return defecto, None, False
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            datos = json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+        return defecto, f"palabras_clave.json inválido ({exc}); se usan valores por defecto", True
+    if not isinstance(datos, dict):
+        return defecto, "palabras_clave.json no es un objeto; se usan valores por defecto", True
+    resultado: dict[str, list[str]] = {}
+    for clave, valor in datos.items():
+        if not isinstance(clave, str):
+            continue
+        if isinstance(valor, list):
+            terminos = normalizar_terminos([str(x) for x in valor])
+            if terminos:
+                resultado[clave] = terminos
+        elif isinstance(valor, str) and valor.strip():
+            resultado[clave] = [valor.strip()]
+    if not resultado:
+        return defecto, "palabras_clave.json vacío; se usan valores por defecto", True
+    return resultado, None, False
+
+
+def guardar_palabras_clave(ruta: str, palabras: dict[str, list[str]], json_invalido: bool) -> None:
+    if json_invalido and os.path.isfile(ruta):
+        respaldo = ruta + ".bak"
+        try:
+            with open(ruta, "rb") as origen, open(respaldo, "wb") as destino:
+                destino.write(origen.read())
+        except OSError:
+            pass
+    limpio = {k: normalizar_terminos(v) for k, v in palabras.items() if normalizar_terminos(v)}
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(limpio, f, ensure_ascii=False, indent=2)
+
+
+def normalizar_terminos(lines) -> list[str]:
+    vistos: set[str] = set()
+    salida: list[str] = []
+    for line in lines:
+        termino = re.sub(r"\s+", " ", str(line)).strip()
+        if not termino:
+            continue
+        clave = termino.casefold()
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        salida.append(termino)
+    return salida
+
+
+def _texto_busqueda(n: Negocio) -> str:
+    partes = (
+        n.nombre, n.ciudad, n.tipo, n.telefono, n.web, n.direccion,
+        n.estado, n.notas, n.guardado_en, str(n.resenas),
+    )
+    return " ".join(partes).lower()
+
+
+def _valores_busqueda(n: Negocio) -> tuple:
+    return (
+        "★" if n.guardado else "☆",
+        n.nombre,
+        n.ciudad,
+        n.tipo,
+        n.telefono,
+        str(n.resenas),
+        n.web,
+        n.direccion,
+        n.estado,
+    )
+
+
+def _valores_guardados(n: Negocio) -> tuple:
+    return (
+        "★",
+        n.nombre,
+        n.ciudad,
+        n.tipo,
+        n.telefono,
+        n.estado,
+        n.guardado_en,
+        n.web,
+        n.direccion,
+    )
+
+
+def mensaje_para(n: Negocio) -> str:
+    plantilla = _MENSAJES_POR_TIPO.get(
+        n.tipo,
+        "Hola, vi {nombre} y creo que podrías automatizar tu atención por WhatsApp.",
+    )
+    return plantilla.format(nombre=n.nombre)
+
+
+def abrir_url(url: str) -> bool:
+    url = (url or "").strip()
+    if not url:
+        return False
+    if not re.match(r"^https?://", url, flags=re.I):
+        if url.startswith("www."):
+            url = "https://" + url
+        else:
+            return False
+    try:
+        webbrowser.open(url)
+        return True
+    except Exception:
+        return False
+
+
+def abrir_ruta(path: str) -> None:
+    path = os.path.abspath(path)
+    if os.name == "nt":
+        os.startfile(path)  # type: ignore[attr-defined]
+        return
+    try:
+        subprocess.Popen(["xdg-open", path])
+    except OSError:
+        webbrowser.open(path)
+
+
+def ruta_unica(path: str) -> str:
+    if not os.path.exists(path):
+        return path
+    base, ext = os.path.splitext(path)
+    n = 2
+    while True:
+        candidato = f"{base} ({n}){ext}"
+        if not os.path.exists(candidato):
+            return candidato
+        n += 1
+
+
+def _sanitizar_parte(parte: str) -> str:
+    invalidos = '<>:"/\\|?*'
+    s = str(parte).strip().replace(" ", "-")
+    for c in invalidos:
+        s = s.replace(c, "")
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+    return s or "sin-nombre"
+
+
+def nombre_exportacion(partes, fmt: str) -> str:
+    fecha = datetime.now().strftime("%d-%m-%Y-%H-%M")
+    cuerpo = "-".join(_sanitizar_parte(p) for p in partes if str(p).strip())
+    ext = "xlsx" if fmt.lower() in ("xlsx", "excel") else "csv"
+    return f"{cuerpo}-{fecha}.{ext}" if cuerpo else f"exportacion-{fecha}.{ext}"
+
+
+def exportar_excel(ruta: str, lista: list[Negocio]) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Prospectos"
+    borde_fino = Side(style="thin", color="D0D0D0")
+    borde = Border(left=borde_fino, right=borde_fino, top=borde_fino, bottom=borde_fino)
+    relleno_cabecera = PatternFill(fill_type="solid", fgColor="1E6BB8")
+    fuente_cabecera = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    relleno_alt = PatternFill(fill_type="solid", fgColor="EEF4FA")
+    alin_cab = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    alin_dat = Alignment(vertical="center", wrap_text=True)
+
+    for col, titulo in enumerate(_COLUMNAS_EXPORT, start=1):
+        celda = ws.cell(row=1, column=col, value=titulo)
+        celda.fill = relleno_cabecera
+        celda.font = fuente_cabecera
+        celda.alignment = alin_cab
+        celda.border = borde
+
+    for fila_idx, n in enumerate(lista, start=2):
+        valores = (
+            n.nombre, n.ciudad, n.tipo, n.telefono, n.resenas, n.web,
+            n.link_maps, n.direccion, n.estado, n.notas,
+            "sí" if n.guardado else "no",
+        )
+        zebra = fila_idx % 2 == 0
+        for col, valor in enumerate(valores, start=1):
+            celda = ws.cell(row=fila_idx, column=col, value=valor)
+            celda.border = borde
+            celda.alignment = alin_dat
+            if zebra:
+                celda.fill = relleno_alt
+
+    for col in range(1, len(_COLUMNAS_EXPORT) + 1):
+        letra = get_column_letter(col)
+        ancho = len(str(_COLUMNAS_EXPORT[col - 1]))
+        for fila_idx in range(2, ws.max_row + 1):
+            valor = ws.cell(row=fila_idx, column=col).value
+            if valor is not None:
+                ancho = max(ancho, len(str(valor)))
+        ws.column_dimensions[letra].width = min(ancho + 3, 55)
+
+    ws.row_dimensions[1].height = 28
+    ws.freeze_panes = "A2"
+    if lista:
+        ultima = get_column_letter(len(_COLUMNAS_EXPORT))
+        ws.auto_filter.ref = f"A1:{ultima}{ws.max_row}"
+    wb.save(ruta)
+
+
+def exportar_csv(ruta: str, lista: list[Negocio]) -> None:
+    with open(ruta, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(_COLUMNAS_EXPORT)
+        for n in lista:
+            writer.writerow([
+                n.nombre, n.ciudad, n.tipo, n.telefono, n.resenas, n.web,
+                n.link_maps, n.direccion, n.estado, n.notas,
+                "sí" if n.guardado else "no",
+            ])
+
+
+def _clave_termino(pais: str, ciudad: str, termino: str) -> str:
+    return f"{pais.casefold()}|{ciudad.casefold()}|{termino.casefold()}"
+
+
+# ---------------------------------------------------------------------------
+# Base de datos
+# ---------------------------------------------------------------------------
+
+class BaseDatos:
+    """SQLite thread-safe para prospectos, uso de API y términos omitidos."""
+
+    def __init__(self, ruta: str) -> None:
+        self._ruta = ruta
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(ruta, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        with self._lock:
+            self._crear_esquema()
+
+    @property
+    def ruta(self) -> str:
+        return self._ruta
+
+    def _crear_esquema(self) -> None:
+        cur = self._conn.cursor()
+        cur.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS prospectos (
+                place_id TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL DEFAULT '',
+                ciudad TEXT NOT NULL DEFAULT '',
+                tipo TEXT NOT NULL DEFAULT '',
+                telefono TEXT NOT NULL DEFAULT '',
+                web TEXT NOT NULL DEFAULT '',
+                resenas INTEGER NOT NULL DEFAULT 0,
+                link_maps TEXT NOT NULL DEFAULT '',
+                direccion TEXT NOT NULL DEFAULT '',
+                estado TEXT NOT NULL DEFAULT 'nuevo',
+                notas TEXT NOT NULL DEFAULT '',
+                guardado INTEGER NOT NULL DEFAULT 0,
+                guardado_en TEXT NOT NULL DEFAULT '',
+                actividad INTEGER NOT NULL DEFAULT 1,
+                edit_nombre INTEGER NOT NULL DEFAULT 0,
+                edit_telefono INTEGER NOT NULL DEFAULT 0,
+                edit_resenas INTEGER NOT NULL DEFAULT 0,
+                edit_web INTEGER NOT NULL DEFAULT 0,
+                edit_direccion INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS api_uso (
+                mes TEXT PRIMARY KEY,
+                peticiones INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS terminos_omitidos (
+                clave TEXT PRIMARY KEY
+            );
+            """
+        )
+        self._conn.commit()
+
+    def _mes_actual(self) -> str:
+        return time.strftime("%Y-%m")
+
+    def uso_mes(self) -> int:
+        with self._lock:
+            fila = self._conn.execute(
+                "SELECT peticiones FROM api_uso WHERE mes = ?",
+                (self._mes_actual(),),
+            ).fetchone()
+            return int(fila["peticiones"]) if fila else 0
+
+    def registrar_uso(self) -> None:
+        with self._lock:
+            mes = self._mes_actual()
+            self._conn.execute(
+                """
+                INSERT INTO api_uso (mes, peticiones) VALUES (?, 1)
+                ON CONFLICT(mes) DO UPDATE SET peticiones = peticiones + 1
+                """,
+                (mes,),
+            )
+            self._conn.commit()
+
+    def _fila_a_negocio(self, fila: sqlite3.Row) -> Negocio:
+        return Negocio(
+            place_id=fila["place_id"],
+            nombre=fila["nombre"],
+            ciudad=fila["ciudad"],
+            tipo=fila["tipo"],
+            telefono=fila["telefono"],
+            web=fila["web"],
+            resenas=int(fila["resenas"] or 0),
+            link_maps=fila["link_maps"],
+            direccion=fila["direccion"],
+            estado=fila["estado"] or "nuevo",
+            notas=fila["notas"] or "",
+            guardado=bool(fila["guardado"]),
+            guardado_en=fila["guardado_en"] or "",
+            actividad_reciente=bool(fila["actividad"]),
+        )
+
+    def sincronizar(self, negocios: list[Negocio]) -> None:
+        if not negocios:
+            return
+        with self._lock:
+            for n in negocios:
+                fila = self._conn.execute(
+                    "SELECT * FROM prospectos WHERE place_id = ?",
+                    (n.place_id,),
+                ).fetchone()
+                if fila is None:
+                    self._conn.execute(
+                        """
+                        INSERT INTO prospectos (
+                            place_id, nombre, ciudad, tipo, telefono, web, resenas,
+                            link_maps, direccion, estado, notas, guardado, guardado_en, actividad
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            n.place_id, n.nombre, n.ciudad, n.tipo, n.telefono, n.web, int(n.resenas),
+                            n.link_maps, n.direccion, n.estado or "nuevo", n.notas or "",
+                            1 if n.guardado else 0, n.guardado_en or "",
+                            1 if n.actividad_reciente else 0,
+                        ),
+                    )
+                else:
+                    nombre = fila["nombre"] if fila["edit_nombre"] else n.nombre
+                    telefono = fila["telefono"] if fila["edit_telefono"] else n.telefono
+                    resenas = fila["resenas"] if fila["edit_resenas"] else int(n.resenas)
+                    web = fila["web"] if fila["edit_web"] else n.web
+                    direccion = fila["direccion"] if fila["edit_direccion"] else n.direccion
+                    self._conn.execute(
+                        """
+                        UPDATE prospectos SET
+                            nombre = ?, ciudad = ?, tipo = ?, telefono = ?, web = ?,
+                            resenas = ?, link_maps = ?, direccion = ?, actividad = ?
+                        WHERE place_id = ?
+                        """,
+                        (
+                            nombre, n.ciudad, n.tipo, telefono, web, int(resenas),
+                            n.link_maps, direccion,
+                            1 if n.actividad_reciente else 0, n.place_id,
+                        ),
+                    )
+                    n.nombre = nombre
+                    n.telefono = telefono
+                    n.resenas = int(resenas)
+                    n.web = web
+                    n.direccion = direccion
+                    n.estado = fila["estado"] or "nuevo"
+                    n.notas = fila["notas"] or ""
+                    n.guardado = bool(fila["guardado"])
+                    n.guardado_en = fila["guardado_en"] or ""
+            self._conn.commit()
+
+    def set_guardado(self, place_id: str, valor: bool) -> Optional[str]:
+        with self._lock:
+            fila = self._conn.execute(
+                "SELECT place_id FROM prospectos WHERE place_id = ?",
+                (place_id,),
+            ).fetchone()
+            if fila is None:
+                return None
+            guardado_en = datetime.now().strftime("%Y-%m-%d %H:%M") if valor else ""
+            self._conn.execute(
+                "UPDATE prospectos SET guardado = ?, guardado_en = ? WHERE place_id = ?",
+                (1 if valor else 0, guardado_en, place_id),
+            )
+            self._conn.commit()
+            return guardado_en
+
+    def set_estado(self, place_id: str, estado: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE prospectos SET estado = ? WHERE place_id = ?",
+                (estado, place_id),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def set_edicion(self, n: Negocio, campo: str, valor) -> None:
+        if campo not in CAMPOS_EDITABLES:
+            return
+        col_edit = f"edit_{campo}"
+        with self._lock:
+            self._conn.execute(
+                f"UPDATE prospectos SET {campo} = ?, {col_edit} = 1 WHERE place_id = ?",
+                (valor, n.place_id),
+            )
+            self._conn.commit()
+
+    def listar_guardados(self) -> list[Negocio]:
+        with self._lock:
+            filas = self._conn.execute(
+                "SELECT * FROM prospectos WHERE guardado = 1 ORDER BY guardado_en DESC, nombre COLLATE NOCASE"
+            ).fetchall()
+            return [self._fila_a_negocio(f) for f in filas]
+
+    def set_notas(self, place_id: str, texto: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE prospectos SET notas = ? WHERE place_id = ?",
+                (texto, place_id),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def termino_omitido(self, clave: str) -> bool:
+        with self._lock:
+            fila = self._conn.execute(
+                "SELECT 1 FROM terminos_omitidos WHERE clave = ?",
+                (clave,),
+            ).fetchone()
+            return fila is not None
+
+    def marcar_omitido(self, clave: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO terminos_omitidos (clave) VALUES (?)",
+                (clave,),
+            )
+            self._conn.commit()
+
+    def reiniciar_terminos(self) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM terminos_omitidos")
+            self._conn.commit()
+
+    def cerrar(self) -> None:
+        with self._lock:
+            try:
+                self._conn.close()
+            except sqlite3.Error:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# Uso de API
+# ---------------------------------------------------------------------------
+
+class ApiUsageTracker:
+    CREDITO_MENSUAL_USD = 200.0
+
+    def __init__(self, db: BaseDatos) -> None:
+        self._db = db
+        self.peticiones_sesion = 0
+
+    def registrar_peticion(self) -> None:
+        self.peticiones_sesion += 1
+        self._db.registrar_uso()
+
+    def resumen_texto(self) -> str:
+        mes = time.strftime("%Y-%m")
+        peticiones_mes = self._db.uso_mes()
+        costo_mes = peticiones_mes * COSTO_ESTIMADO_POR_PETICION_USD
+        credito_restante = max(0.0, self.CREDITO_MENSUAL_USD - costo_mes)
+        uso_pct = min(100.0, (costo_mes / self.CREDITO_MENSUAL_USD) * 100) if self.CREDITO_MENSUAL_USD else 0.0
+        return (
+            "Uso de Google Places API (Text Search)\n"
+            "────────────────────────────────────\n\n"
+            f"Sesión actual:              {self.peticiones_sesion} peticiones\n"
+            f"Este mes ({mes}):           {peticiones_mes} peticiones\n\n"
+            "Estimado de costo\n"
+            "────────────────────────────────────\n"
+            f"Costo estimado este mes:    ${costo_mes:.2f} USD\n"
+            f"Crédito mensual referencia: ${self.CREDITO_MENSUAL_USD:.0f} USD\n"
+            f"Crédito restante estimado:  ${credito_restante:.2f} USD\n"
+            f"Uso estimado del crédito:   {uso_pct:.1f}%\n\n"
+            "Notas\n"
+            "────────────────────────────────────\n"
+            "• Cada consulta a Google Maps cuenta como 1 petición.\n"
+            "• El costo real depende de tu plan en Google Cloud.\n"
+            "• Google no expone la cuota exacta restante con solo la API key.\n"
+            "• Revisa el uso real en:\n"
+            "  console.cloud.google.com → APIs y servicios → Panel"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Cliente Google Places (New)
+# ---------------------------------------------------------------------------
+
+class ClienteGooglePlaces:
+    _FIELD_MASK = (
+        "places.id,places.displayName,places.formattedAddress,"
+        "places.internationalPhoneNumber,places.nationalPhoneNumber,"
+        "places.websiteUri,places.userRatingCount,places.businessStatus,"
+        "places.googleMapsUri"
+    )
+
+    def __init__(
+        self,
+        api_key: str,
+        uso: ApiUsageTracker,
+        cancelar: threading.Event,
+    ) -> None:
+        self._api_key = api_key
+        self._uso = uso
+        self._cancelar = cancelar
+
+    def _request(self, body: dict) -> dict:
+        if self._cancelar.is_set():
+            raise RuntimeError("Búsqueda cancelada")
+        req = urllib.request.Request(
+            "https://places.googleapis.com/v1/places:searchText",
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": self._api_key,
+                "X-Goog-FieldMask": self._FIELD_MASK,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detalle = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Google Places API error ({exc.code}): {detalle}") from exc
+        self._uso.registrar_peticion()
+        return data
+
+    def _place_a_negocio(self, place: dict, ciudad: str, tipo: str) -> Optional[Negocio]:
+        place_id = (place.get("id") or "").strip()
+        nombre = ((place.get("displayName") or {}).get("text") or "").strip()
+        if not place_id or not nombre:
+            return None
+        telefono = (
+            place.get("internationalPhoneNumber")
+            or place.get("nationalPhoneNumber")
+            or ""
+        ).strip()
+        web = (place.get("websiteUri") or "").strip()
+        resenas = int(place["userRatingCount"]) if "userRatingCount" in place else 0
+        status = place.get("businessStatus", "")
+        actividad = status != "CLOSED_PERMANENTLY"
+        link_maps = (place.get("googleMapsUri") or "").strip()
+        if not link_maps and place_id:
+            link_maps = f"https://www.google.com/maps/place/?q=place_id:{place_id}"
+        direccion = (place.get("formattedAddress") or "").strip()
+        return Negocio(
+            place_id=place_id,
+            nombre=nombre,
+            ciudad=ciudad,
+            tipo=tipo,
+            telefono=telefono,
+            web=web,
+            resenas=resenas,
+            link_maps=link_maps,
+            direccion=direccion,
+            actividad_reciente=actividad,
+        )
+
+    def buscar_consulta(
+        self,
+        text_query: str,
+        region: str,
+        ciudad: str = "",
+        tipo: str = "",
+    ) -> list[Negocio]:
+        """Hasta 3 páginas × 20 resultados para una consulta de texto."""
+        resultados: list[Negocio] = []
+        vistos: set[str] = set()
+        page_token: Optional[str] = None
+        for pagina in range(3):
+            if self._cancelar.is_set():
+                break
+            body: dict = {
+                "textQuery": text_query,
+                "languageCode": "es",
+                "regionCode": region or "CO",
+                "maxResultCount": 20,
+            }
+            if page_token:
+                body["pageToken"] = page_token
+            data = self._request(body)
+            places = data.get("places") or []
+            if not places:
+                break
+            for place in places:
+                negocio = self._place_a_negocio(place, ciudad, tipo)
+                if negocio is None or negocio.place_id in vistos:
+                    continue
+                vistos.add(negocio.place_id)
+                resultados.append(negocio)
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+            if pagina < 2:
+                time.sleep(0.35)
+        return resultados
+
+
+# ---------------------------------------------------------------------------
+# Sesión de búsqueda paginada
+# ---------------------------------------------------------------------------
+
+class SesionBusqueda:
+    def __init__(
+        self,
+        cliente: ClienteGooglePlaces,
+        db: BaseDatos,
+        pais: str,
+        ciudad: str,
+        tipo: str,
+        terminos: list[str],
+        min_resenas: int,
+        limite: int,
+        progreso: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        self.cliente = cliente
+        self.db = db
+        self.pais = pais
+        self.ciudad = ciudad
+        self.tipo = tipo
+        self.terminos = list(terminos)
+        self.min_resenas = max(0, int(min_resenas))
+        self.limite = max(1, int(limite))
+        self.progreso = progreso or (lambda _t: None)
+        self.paginas: dict[int, list[Negocio]] = {}
+        self.raw: dict[str, Negocio] = {}
+        self.omitidos: set[str] = set()
+        self.error: Optional[str] = None
+        self.cancelado = False
+        self.peticiones = 0
+        self.agotado = False
+        self._cola: list[Negocio] = []
+        self._idx_termino = 0
+        self._orden: list[str] = []
+        self._region = _PAIS_REGION.get(pais, "CO")
+        for termino in self.terminos:
+            clave = _clave_termino(pais, ciudad, termino)
+            if db.termino_omitido(clave):
+                self.omitidos.add(termino)
+
+    def _cumple(self, n: Negocio) -> bool:
+        return bool(n.actividad_reciente) and int(n.resenas) >= self.min_resenas
+
+    def _avisar(self, texto: str) -> None:
+        try:
+            self.progreso(texto)
+        except Exception:
+            pass
+
+    def _peticiones_cliente(self) -> int:
+        return self.cliente._uso.peticiones_sesion
+
+    def _siguiente_termino(self) -> Optional[str]:
+        while self._idx_termino < len(self.terminos):
+            termino = self.terminos[self._idx_termino]
+            self._idx_termino += 1
+            if termino in self.omitidos:
+                continue
+            return termino
+        return None
+
+    def _incorporar(self, negocios: list[Negocio]) -> int:
+        nuevos = 0
+        pendientes_sync: list[Negocio] = []
+        for n in negocios:
+            if n.place_id in self.raw:
+                continue
+            self.raw[n.place_id] = n
+            self._orden.append(n.place_id)
+            pendientes_sync.append(n)
+            if self._cumple(n):
+                self._cola.append(n)
+                nuevos += 1
+        if pendientes_sync:
+            self.db.sincronizar(pendientes_sync)
+        return nuevos
+
+    def construir_pagina(self, permitir_api: bool = True) -> list[Negocio]:
+        if self.cliente._cancelar.is_set():
+            self.cancelado = True
+        pagina: list[Negocio] = []
+        while len(pagina) < self.limite and self._cola:
+            pagina.append(self._cola.pop(0))
+
+        while (
+            permitir_api
+            and len(pagina) < self.limite
+            and not self.agotado
+            and not self.cliente._cancelar.is_set()
+        ):
+            termino = self._siguiente_termino()
+            if termino is None:
+                self.agotado = True
+                break
+            consulta = f"{termino} en {self.ciudad}, {self.pais}"
+            self._avisar(f"Consultando «{termino}» en {self.ciudad}…")
+            antes = self._peticiones_cliente()
+            try:
+                hallados = self.cliente.buscar_consulta(
+                    consulta, self._region, ciudad=self.ciudad, tipo=self.tipo,
+                )
+            except RuntimeError as exc:
+                if self.cliente._cancelar.is_set() or "cancelad" in str(exc).lower():
+                    self.cancelado = True
+                    break
+                self.error = str(exc)
+                break
+            except Exception as exc:  # noqa: BLE001
+                self.error = str(exc)
+                break
+            self.peticiones += max(0, self._peticiones_cliente() - antes)
+            nuevos_ids = 0
+            for n in hallados:
+                if n.place_id not in self.raw:
+                    nuevos_ids += 1
+            self._incorporar(hallados)
+            if nuevos_ids == 0:
+                clave = _clave_termino(self.pais, self.ciudad, termino)
+                self.db.marcar_omitido(clave)
+                self.omitidos.add(termino)
+            while len(pagina) < self.limite and self._cola:
+                pagina.append(self._cola.pop(0))
+            time.sleep(0.25)
+
+        if self.cliente._cancelar.is_set():
+            self.cancelado = True
+
+        if not pagina:
+            if not self._cola and (self.agotado or self._idx_termino >= len(self.terminos)):
+                self.agotado = True
+            return []
+
+        numero = len(self.paginas) + 1
+        self.paginas[numero] = pagina
+        return pagina
+
+    def hay_mas(self) -> bool:
+        if self._cola:
+            return True
+        if self.agotado:
+            return False
+        restantes = [
+            t for t in self.terminos[self._idx_termino :]
+            if t not in self.omitidos
+        ]
+        return bool(restantes)
+
+    def reconfigurar(self, min_resenas: int, limite: int) -> None:
+        self.min_resenas = max(0, int(min_resenas))
+        self.limite = max(1, int(limite))
+        self.paginas = {}
+        self._cola = []
+        for pid in self._orden:
+            n = self.raw.get(pid)
+            if n is not None and self._cumple(n):
+                self._cola.append(n)
+
+    def todos_los_negocios(self) -> list[Negocio]:
+        return [self.raw[pid] for pid in self._orden if pid in self.raw and self._cumple(self.raw[pid])]
+
+    def estimar_peticiones_restantes(self) -> int:
+        restantes = [
+            t for t in self.terminos[self._idx_termino :]
+            if t not in self.omitidos
+        ]
+        return len(restantes) * 3
+
+    def cargar_todo(self, tope_peticiones: int) -> None:
+        inicio = self.peticiones
+        while not self.agotado and not self.cliente._cancelar.is_set():
+            if tope_peticiones > 0 and (self.peticiones - inicio) >= tope_peticiones:
+                break
+            if not self.hay_mas() and not self._cola:
+                self.agotado = True
+                break
+            pagina = self.construir_pagina(permitir_api=True)
+            if not pagina and (self.agotado or self.error or self.cancelado):
+                break
+            if not pagina and not self.hay_mas():
+                self.agotado = True
+                break
+
+
+# ---------------------------------------------------------------------------
+# Tabla editable
+# ---------------------------------------------------------------------------
+
+class TablaDatos(ttk.Frame):
+    def __init__(
+        self,
+        parent,
+        cols,
+        on_estrella: Optional[Callable[[str], None]] = None,
+        on_editar: Optional[Callable[[str, str, str], None]] = None,
+        on_contexto: Optional[Callable[[tk.Event], None]] = None,
+        on_doble_estado: Optional[Callable[[str, int, int], None]] = None,
+        on_seleccion: Optional[Callable[[], None]] = None,
+        on_mensaje: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.cols = list(cols)
+        self.col_ids = [c[0] for c in self.cols]
+        self.on_estrella = on_estrella
+        self.on_editar = on_editar
+        self.on_contexto = on_contexto
+        self.on_doble_estado = on_doble_estado
+        self.on_seleccion = on_seleccion
+        self.on_mensaje = on_mensaje
+        self._editor: Optional[ttk.Entry] = None
+        self._edit_iid: Optional[str] = None
+        self._edit_col: Optional[str] = None
+        self._estados: dict[str, str] = {}
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(
+            self,
+            columns=self.col_ids,
+            show="headings",
+            style="Datos.Treeview",
+            selectmode="extended",
+        )
+        ys = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        xs = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=ys.set, xscrollcommand=xs.set)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        ys.grid(row=0, column=1, sticky="ns")
+        xs.grid(row=1, column=0, sticky="ew")
+
+        for col_id, heading, width in self.cols:
+            self.tree.heading(col_id, text=heading, anchor="w")
+            stretch = col_id not in ("fav", "resenas")
+            self.tree.column(col_id, width=width, minwidth=28, stretch=stretch, anchor="w")
+
+        for estado, color in _COLORES_ESTADO.items():
+            self.tree.tag_configure(estado, foreground=color)
+
+        self.tree.bind("<Button-1>", self._on_click, add=True)
+        self.tree.bind("<Double-1>", self._on_doble)
+        self.tree.bind("<Button-3>", self._on_right)
+        self.tree.bind("<<TreeviewSelect>>", self._on_sel)
+        self.tree.bind("<Control-c>", lambda _e: self._copiar())
+        self.tree.bind("<Escape>", lambda _e: (self.cerrar_editor(False), "break")[1])
+
+    def _avisar(self, texto: str) -> None:
+        if self.on_mensaje:
+            self.on_mensaje(texto)
+
+    def _on_sel(self, _event=None) -> None:
+        if self.on_seleccion:
+            self.on_seleccion()
+
+    def _identificar(self, event) -> tuple[Optional[str], Optional[str]]:
+        region = self.tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return None, None
+        fila = self.tree.identify_row(event.y)
+        col = self.tree.identify_column(event.x)
+        if not fila or not col:
+            return None, None
+        try:
+            idx = int(col.replace("#", "")) - 1
+        except ValueError:
+            return None, None
+        if idx < 0 or idx >= len(self.col_ids):
+            return None, None
+        return fila, self.col_ids[idx]
+
+    def _on_click(self, event) -> None:
+        iid, col = self._identificar(event)
+        if iid and col == "fav" and self.on_estrella:
+            self.tree.selection_set(iid)
+            self.on_estrella(iid)
+            return "break"
+
+    def _on_doble(self, event) -> None:
+        iid, col = self._identificar(event)
+        if not iid or not col:
+            return
+        self.tree.selection_set(iid)
+        if col == "estado" and self.on_doble_estado:
+            self.on_doble_estado(iid, event.x_root, event.y_root)
+            return "break"
+        if col in CAMPO_DE_COLUMNA:
+            self._abrir_editor(iid, col)
+            return "break"
+
+    def _on_right(self, event) -> None:
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            if iid not in self.tree.selection():
+                self.tree.selection_set(iid)
+            self.tree.focus(iid)
+        if self.on_contexto:
+            self.on_contexto(event)
+
+    def _abrir_editor(self, iid: str, col_id: str) -> None:
+        self.cerrar_editor(True)
+        bbox = self.tree.bbox(iid, col_id)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        valor = ""
+        try:
+            valores = self.tree.item(iid, "values")
+            idx = self.col_ids.index(col_id)
+            valor = str(valores[idx]) if idx < len(valores) else ""
+        except (ValueError, IndexError, tk.TclError):
+            valor = ""
+        entry = ttk.Entry(self.tree)
+        entry.insert(0, valor)
+        entry.select_range(0, "end")
+        entry.focus_set()
+        entry.place(x=x, y=y, width=max(w, 60), height=h)
+        self._editor = entry
+        self._edit_iid = iid
+        self._edit_col = col_id
+
+        def confirmar(_e=None) -> None:
+            self.cerrar_editor(True)
+
+        def cancelar(_e=None) -> None:
+            self.cerrar_editor(False)
+
+        entry.bind("<Return>", confirmar)
+        entry.bind("<FocusOut>", confirmar)
+        entry.bind("<Escape>", cancelar)
+
+    def cerrar_editor(self, guardar: bool) -> None:
+        if self._editor is None:
+            return
+        entry = self._editor
+        iid, col = self._edit_iid, self._edit_col
+        valor = entry.get()
+        self._editor = None
+        self._edit_iid = None
+        self._edit_col = None
+        try:
+            entry.destroy()
+        except tk.TclError:
+            pass
+        if guardar and iid and col and self.on_editar:
+            self.on_editar(iid, col, valor)
+
+    def set_filas(self, filas: list[tuple]) -> None:
+        self.cerrar_editor(False)
+        self.tree.delete(*self.tree.get_children())
+        self._estados.clear()
+        for iid, valores, estado in filas:
+            self._estados[iid] = estado
+            self.tree.insert("", "end", iid=iid, values=valores, tags=(estado,))
+
+    def actualizar_fila(self, iid: str, valores, estado: str) -> None:
+        if not self.tree.exists(iid):
+            return
+        self._estados[iid] = estado
+        self.tree.item(iid, values=valores, tags=(estado,))
+
+    def seleccion(self) -> list[str]:
+        return list(self.tree.selection())
+
+    def iids(self) -> list[str]:
+        return list(self.tree.get_children())
+
+    def _copiar(self) -> None:
+        foco = self.tree.focus()
+        sel = self.seleccion()
+        if not sel and not foco:
+            return
+        textos: list[str] = []
+        for iid in sel or ([foco] if foco else []):
+            valores = self.tree.item(iid, "values")
+            textos.append("\t".join(str(v) for v in valores))
+        texto = "\n".join(textos)
+        try:
+            root = self.winfo_toplevel()
+            root.clipboard_clear()
+            root.clipboard_append(texto)
+            self._avisar("Copiado al portapapeles")
+        except tk.TclError:
+            pass
+
 # ---------------------------------------------------------------------------
 # Interfaz gráfica — aplicación
 # ---------------------------------------------------------------------------
