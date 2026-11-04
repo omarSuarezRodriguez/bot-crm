@@ -1,4 +1,4 @@
-## v1.12
+## v1.13
 
 
 
@@ -110,3 +110,15 @@ Se agrega app_v3.py (que es la versión final que dió claude, la v2 se pone den
 
 
 Se generaron 499 posibles prospectos médicos en un informe y está ya almacenado
+
+
+
+
+##################
+## v1.13
+
+
+Se agrega app_v4.py (que es la final, hasta el momento, es una mejora de la app_v3.py), se implementó la función de importar informes desde un excel (mejora implementada con claude Sonnet 5.5 Alto web)
+
+
+
