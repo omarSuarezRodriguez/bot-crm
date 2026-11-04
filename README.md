@@ -1,4 +1,7 @@
-Prompt para ahorrar:
+## bot-crm
+Programa que sirve para investigar en diferentes ciudades sobre que negocios están en google maps, dependiendo si es restaurante, odontologo, comida rapida, etc, genera reporte en excel y es super bueno para iniciar buscando mercado
+
+## Prompt para ahorrar:
 
 Sé directo.  sin alternativas, sin contexto extra. Código solo si aplica y lo mínimo necesario. No sobreingenierices, al final da un breve resumen de lo que hiciste, muy breve.
 
@@ -7,10 +10,23 @@ Sé directo.  sin alternativas, sin contexto extra. Código solo si aplica y lo 
 
 
 
+## Implementar luego:
 
-Aquí van **cifras tangibles con fuente**, listas para usar en venta — y al final cómo decirlas sin exagerar.
 
----
+Abogados → bot de agendamiento + filtrado de casos
+Contadores → bot de clientes + envío de documentos
+Clínicas → citas + recordatorios + triage básico
+Inmobiliarias → bot de captación de leads
+Gimnasios
+
+
+
+
+
+
+
+
+**Beneficios de tener chatbot con cifras tangibles y fuente**
 
 ## 1. Velocidad de respuesta = más ventas (el más sólido para tu pitch)
 
