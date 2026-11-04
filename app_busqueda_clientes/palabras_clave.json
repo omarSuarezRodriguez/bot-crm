@@ -1,0 +1,88 @@
+{
+  "Comidas rápidas": [
+    "comida rápida",
+    "fast food",
+    "hamburguesas",
+    "salchipapas",
+    "arepas",
+    "perros calientes",
+    "pizza a domicilio",
+    "pollo broaster",
+    "comida corrida",
+    "snacks",
+    "empanadas",
+    "tacos"
+  ],
+  "Restaurantes": [
+    "restaurante",
+    "restaurantes",
+    "comida",
+    "asadero",
+    "cafetería",
+    "pizzería",
+    "marisquería",
+    "sushi",
+    "comida china",
+    "parrilla",
+    "menú del día",
+    "brunch"
+  ],
+  "Barberías": [
+    "barbería",
+    "barber shop",
+    "peluquería barbería",
+    "corte de cabello",
+    "barbería hombres",
+    "barbería niños",
+    "fade",
+    "afeitado",
+    "grooming"
+  ],
+  "Odontólogos": [
+    "odontólogo",
+    "clínica dental",
+    "dentista",
+    "odontología",
+    "consultorio dental",
+    "ortodoncia",
+    "endodoncia",
+    "implantes dentales",
+    "blanqueamiento dental"
+  ],
+  "Médicos": [
+    "consultorio médico",
+    "médico consultorio",
+    "medicina general",
+    "médico general",
+    "médico",
+    "medico",
+    "doctor",
+    "doctora",
+    "consulta médica",
+    "médico particular",
+    "especialista médico",
+    "clínica médica"
+  ],
+  "Psicólogos": [
+    "consultorio psicológico",
+    "psicólogo consultorio",
+    "psicólogo clínico",
+    "consulta psicológica",
+    "psicólogo",
+    "psicóloga",
+    "psicólogo particular",
+    "psicóloga clínica",
+    "consultorio de psicología"
+  ],
+  "Inmobiliarias": [
+    "inmobiliaria",
+    "bienes raíces",
+    "apartamentos",
+    "casas en venta",
+    "arriendo apartamentos",
+    "corretaje",
+    "propiedades",
+    "lotes en venta",
+    "oficinas en arriendo"
+  ]
+}

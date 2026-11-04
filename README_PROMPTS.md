@@ -1,4 +1,4 @@
-## v1.9
+## v1.10
 
 
 
@@ -72,6 +72,19 @@ Se agregó app_v2.py (temporal, la que se está haciendo en claude)
 ## v1.9
 
 
-se mejoró la app_v2.py (la que dió claude, se añadió lo necesario para que funcionara usando cursor, pero aún estoy a la espera de que claude termine de hacer el trabajo de darme la app completa
+se mejoró la app_v2.py (la que dió claude, se añadió lo necesario para que funcionara usando cursor, pero aún estoy a la espera de que claude termine de hacer el trabajo de darme la app completa)
 
-)
+
+
+#################
+## v1.10
+
+archivos creados de app_v2.py:
+(se crearon algunos informes, eso es independiente de la app)
+palabras_clave.json
+prospectos.db
+
+para que cuando claude termine, eliminarlos junto con app_v2.py para reemplazar por lo de claude
+
+
+
